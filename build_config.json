@@ -1,6 +1,6 @@
 
 {
-  "board": "bread-compact-wifi-128x64",
+ "board": "bread-compact-wifi",
   "chip": "esp32s3",
   "language": "en_US",
   "pins": {
