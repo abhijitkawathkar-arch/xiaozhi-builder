@@ -1,6 +1,7 @@
 
 {
  "board": "bread-compact-wifi",
+ "display": "ssd1306_128x64",
   "chip": "esp32s3",
   "language": "en_US",
   "pins": {
