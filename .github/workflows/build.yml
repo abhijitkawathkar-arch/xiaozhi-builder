@@ -33,32 +33,66 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      # 1. Checkout repository and firmware submodules
       - name: Checkout with submodules
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # 2. Generate board configuration
       - name: Generate board config
         run: |
+          set -e
+
           if [ -f build_config.json ]; then
-            echo "Using build_config.json from repo"
+            echo "Using build_config.json from repository"
             node scripts/generate-config.js build_config.json
           else
             echo '${{ inputs.config_json }}' > /tmp/config.json
             node scripts/generate-config.js /tmp/config.json
           fi
 
+      # 3. Verify generated configuration
       - name: Verify generated config
         run: |
-          echo "=== config.h (first 60 lines) ==="
-          head -60 xiaozhi-esp32/main/boards/${{ inputs.board }}/config.h
-          echo ""
-          echo "=== sdkconfig.defaults (last 30 lines) ==="
-          tail -30 xiaozhi-esp32/sdkconfig.defaults
-          echo ""
-          echo "=== sdkconfig.defaults line count ==="
-          wc -l xiaozhi-esp32/sdkconfig.defaults
+          set -e
 
+          echo "=== Generated board config ==="
+          head -60 xiaozhi-esp32/main/boards/${{ inputs.board }}/config.h
+
+          echo ""
+          echo "=== Generated sdkconfig.defaults ==="
+          tail -40 xiaozhi-esp32/sdkconfig.defaults
+
+          echo ""
+          echo "=== Checking required 4MB settings ==="
+
+          grep -q '^CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y$' \
+            xiaozhi-esp32/sdkconfig.defaults
+
+          grep -q '^CONFIG_PARTITION_TABLE_CUSTOM=y$' \
+            xiaozhi-esp32/sdkconfig.defaults
+
+          grep -q '^CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/4m.csv"$' \
+            xiaozhi-esp32/sdkconfig.defaults
+
+          echo "PASS: 4MB flash and 4MB partition settings found."
+
+      # 4. Remove old ESP-IDF configuration and build files
+      # This forces ESP-IDF to configure from the generated defaults.
+      - name: Clean previous ESP-IDF configuration
+        run: |
+          set -e
+
+          cd xiaozhi-esp32
+
+          rm -f sdkconfig
+          rm -rf build
+
+          echo "Removed previous sdkconfig and build directory."
+          echo "ESP-IDF must now configure from sdkconfig.defaults."
+
+      # 5. Build firmware
       - name: Build firmware (ESP-IDF v6.0.2)
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -66,25 +100,73 @@ jobs:
           target: ${{ inputs.chip }}
           path: xiaozhi-esp32
 
+      # 6. Verify actual compiled configuration
+      - name: Verify final firmware configuration
+        if: success()
+        run: |
+          set -e
+
+          SDKCONFIG="xiaozhi-esp32/sdkconfig"
+
+          echo "=== Final flash configuration ==="
+          grep -E 'CONFIG_ESPTOOLPY_FLASHSIZE|CONFIG_PARTITION_TABLE_CUSTOM' \
+            "$SDKCONFIG" || true
+
+          echo ""
+          echo "=== Validating flash size ==="
+
+          grep -q '^CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y$' "$SDKCONFIG"
+
+          if grep -q '^CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y$' "$SDKCONFIG"; then
+            echo "ERROR: Firmware is configured for 16MB flash."
+            exit 1
+          fi
+
+          grep -q '^CONFIG_PARTITION_TABLE_CUSTOM=y$' "$SDKCONFIG"
+
+          grep -q '^CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/4m.csv"$' \
+            "$SDKCONFIG"
+
+          echo "PASS: Final firmware configuration is 4MB."
+
+          echo ""
+          echo "=== OLED configuration ==="
+          grep 'CONFIG_OLED_SSD1306_128X64' "$SDKCONFIG" || true
+
+          echo ""
+          echo "=== Language configuration ==="
+          grep 'CONFIG_LANGUAGE_EN_US' "$SDKCONFIG" || true
+
+      # 7. Show build logs if failed
       - name: Show build logs if failed
         if: failure()
         run: |
           echo "=== Build output (last 200 lines) ==="
           tail -200 xiaozhi-esp32/build/log/idf_py_stdout_output_* 2>/dev/null || echo "No stdout log"
+
+          echo ""
           echo "=== Build errors ==="
           tail -200 xiaozhi-esp32/build/log/idf_py_stderr_output_* 2>/dev/null || echo "No stderr log"
 
+      # 8. Collect firmware artifacts
       - name: Collect build artifacts
         if: success()
         run: |
+          set -e
+
           mkdir -p output
+
           cp xiaozhi-esp32/build/*.bin output/ 2>/dev/null || true
           cp xiaozhi-esp32/build/bootloader/*.bin output/ 2>/dev/null || true
           cp xiaozhi-esp32/build/partition_table/*.bin output/ 2>/dev/null || true
-          cp xiaozhi-esp32/sdkconfig output/sdkconfig.txt 2>/dev/null || true
-          cp xiaozhi-esp32/main/boards/${{ inputs.board }}/config.h output/ 2>/dev/null || true
-          ls -la output/
 
+          cp xiaozhi-esp32/sdkconfig output/sdkconfig.txt
+          cp xiaozhi-esp32/main/boards/${{ inputs.board }}/config.h output/
+
+          echo "=== Firmware artifacts ==="
+          ls -lh output/
+
+      # 9. Upload firmware artifacts
       - name: Upload firmware
         if: success()
         uses: actions/upload-artifact@v4
@@ -93,12 +175,17 @@ jobs:
           path: output/
           retention-days: 90
 
+      # 10. Build summary
       - name: Build summary
         if: success()
         run: |
-          FW_SIZE=$(du -sh xiaozhi-esp32/build/*.bin 2>/dev/null | head -1 | cut -f1 || echo "unknown")
-          echo "### ✅ Firmware Built :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "### Firmware Built Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Board:** ${{ inputs.board }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Chip:** ${{ inputs.chip }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Language:** ${{ inputs.language }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Binaries:** $FW_SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "- **Flash:** 4MB" >> $GITHUB_STEP_SUMMARY
+          echo "- **Partition table:** partitions/v2/4m.csv" >> $GITHUB_STEP_SUMMARY
+          echo "- **OLED:** SSD1306 128x64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Firmware artifacts are available above." >> $GITHUB_STEP_SUMMARY
