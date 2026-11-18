@@ -97,6 +97,19 @@ function main(cfg) {
     sdkdefaults += '# CONFIG_OLED_SSD1306_128X32 is not set\n';
     sdkdefaults += '# CONFIG_OLED_SH1106_128X64 is not set\n';
   }
+
+  // --- OLED Display Selection ---
+  sdkdefaults += '\n# --- OLED Display Selection ---\n';
+  sdkdefaults += 'CONFIG_OLED_SSD1306_128X64=y\n';
+  sdkdefaults += '# CONFIG_OLED_SSD1306_128X32 is not set\n';
+  sdkdefaults += '# CONFIG_OLED_SH1106_128X64 is not set\n';
+
+  // --- ESP32-S3FH4R2: 4MB Flash ---
+  sdkdefaults += '\n# --- Flash and Partition Configuration ---\n';
+  sdkdefaults += 'CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y\n';
+  sdkdefaults += 'CONFIG_PARTITION_TABLE_CUSTOM=y\n';
+  sdkdefaults += 'CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/4m.csv"\n';
+
   const outSdkConfig = path.join(xiaozhiRoot, 'sdkconfig.defaults');
   fs.writeFileSync(outSdkConfig, sdkdefaults);
   console.log(`✅ Generated ${outSdkConfig}`);
