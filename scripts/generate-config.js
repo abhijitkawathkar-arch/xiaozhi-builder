@@ -90,7 +90,13 @@ function main(cfg) {
     const langConfig = langMap[cfg.language] || 'LANGUAGE_VI_VN';
     sdkdefaults += `CONFIG_${langConfig}=y\n`;
   }
-
+  // OLED display selection
+  if (cfg.display === 'ssd1306_128x64') {
+    sdkdefaults += '\n# --- OLED Display Selection ---\n';
+    sdkdefaults += 'CONFIG_OLED_SSD1306_128X64=y\n';
+    sdkdefaults += '# CONFIG_OLED_SSD1306_128X32 is not set\n';
+    sdkdefaults += '# CONFIG_OLED_SH1106_128X64 is not set\n';
+  }
   const outSdkConfig = path.join(xiaozhiRoot, 'sdkconfig.defaults');
   fs.writeFileSync(outSdkConfig, sdkdefaults);
   console.log(`✅ Generated ${outSdkConfig}`);
