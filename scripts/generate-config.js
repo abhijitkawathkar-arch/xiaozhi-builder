@@ -101,6 +101,15 @@ function main(cfg) {
   fs.writeFileSync(outSdkConfig, sdkdefaults);
   console.log(`✅ Generated ${outSdkConfig}`);
 
+  
+  // ESP32-S3FH4R2: 4MB Flash configuration
+  sdkdefaults += '\n# --- ESP32-S3FH4R2 Flash Configuration ---\n';
+  sdkdefaults += 'CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y\n';
+  sdkdefaults += '# CONFIG_ESPTOOLPY_FLASHSIZE_16MB is not set\n';
+  sdkdefaults += 'CONFIG_PARTITION_TABLE_CUSTOM=y\n';
+  sdkdefaults += 'CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v2/4m.csv"\n';
+
+
   // 3. Metadata
   const meta = { board, chip, language: cfg.language, generatedAt: new Date().toISOString(), pins: cfg.pins || {} };
   fs.writeFileSync(path.join(xiaozhiRoot, '.xiaozhi-builder.json'), JSON.stringify(meta, null, 2));
