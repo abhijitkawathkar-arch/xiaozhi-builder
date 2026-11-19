@@ -60,6 +60,16 @@ function main(cfg) {
   // 1. Generate board config.h
   let configH = fs.readFileSync(boardConfigH, 'utf8');
 
+  // MAX98357A diagnostic output sample rate
+  configH = configH.replace(
+    /#define AUDIO_OUTPUT_SAMPLE_RATE\s+\d+/,
+    '#define AUDIO_OUTPUT_SAMPLE_RATE 32000'
+  );
+
+  if (!/#define AUDIO_OUTPUT_SAMPLE_RATE\s+32000/.test(configH)) {
+    throw new Error('Failed to set AUDIO_OUTPUT_SAMPLE_RATE to 32000 Hz');
+  }
+
   if (cfg.pins) {
     configH = applyPinOverrides(configH, cfg.pins);
   }
@@ -85,6 +95,7 @@ function main(cfg) {
 
   fs.writeFileSync(boardConfigH, configH);
   console.log('Generated board config.h');
+  console.log('Audio output sample rate: 32000 Hz');
 
   // 2. Read generic ESP-IDF defaults
   const rootDefaults = path.join(xiaozhiRoot, 'sdkconfig.defaults');
@@ -161,6 +172,7 @@ function main(cfg) {
     flash: '4MB',
     psram: '2MB Quad (QSPI)',
     partition: 'partitions/v2/4m.csv',
+    audio_output_sample_rate: 32000,
     generatedAt: new Date().toISOString()
   };
 
